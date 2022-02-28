@@ -10,6 +10,7 @@ group :development, :test do
   gem "activerecord-import"
   gem "bootsnap", require: false
   gem "builder"
+  gem "elastic-apm", "~> 4.5"
   gem "listen", "~> 3.0.8"
   gem "rspec"
   # Hound only supports certain versions of Rubocop -- 1.22.1 is currently the most recent one supported.

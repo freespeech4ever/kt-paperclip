@@ -61,6 +61,8 @@ module Paperclip
     # Performs the conversion of the +file+ into a thumbnail. Returns the Tempfile
     # that contains the new image.
     def make
+      ElasticAPM.set_label("thumbnail_make_basename", @basename)
+      ElasticAPM.set_label("thumbnail_make_format", @format)
       src = @file
       filename = [@basename, @format ? ".#{@format}" : ""].join
       dst = TempfileFactory.new.generate(filename)
@@ -76,6 +78,10 @@ module Paperclip
         parameters = parameters.flatten.compact.join(" ").strip.squeeze(" ")
 
         frame = animated? ? "" : "[#{@frame_index}]"
+        ElasticAPM.set_label("thumbnail_make_frame", frame)
+        ElasticAPM.set_label("thumbnail_make_source", "#{File.expand_path(src.path)}#{frame}")
+        ElasticAPM.set_label("thumbnail_make_desc", File.expand_path(dst.path))
+
         convert(
           parameters,
           source: "#{File.expand_path(src.path)}#{frame}",
