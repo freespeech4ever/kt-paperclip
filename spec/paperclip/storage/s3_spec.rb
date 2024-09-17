@@ -395,12 +395,22 @@ describe Paperclip::Storage::S3 do
       allow(@dummy.avatar).to receive(:s3_object).with(:thumbnail).and_return(object)
 
       expect(object).to receive(:upload_file).
-        with(anything, content_type: "image/png",
-                       acl: :"public-read")
+        with(
+          anything,
+          {
+            content_type: "image/png",
+            acl: :"public-read",
+          },
+        )
       expect(object).to receive(:upload_file).
-        with(anything, content_type: "image/png",
-                       acl: :"public-read",
-                       cache_control: "max-age=31557600")
+        with(
+          anything,
+          {
+            content_type: "image/png",
+            acl: :"public-read",
+            cache_control: "max-age=31557600",
+          },
+        )
       @dummy.save
     end
 
@@ -409,6 +419,62 @@ describe Paperclip::Storage::S3 do
     it "succeeds" do
       assert_equal @dummy.counter, 7
     end
+  end
+
+  context "An attachment that uses S3 for storage with acl disabled" do
+    before do
+      rebuild_model(
+        aws2_add_region.merge(
+          storage: :s3,
+          styles: { thumb: ["90x90#", :jpg] },
+          bucket: "bucket",
+          s3_acl_enabled: false,
+          s3_credentials: {
+            "access_key_id" => "12345",
+            "secret_access_key" => "54321"
+          }
+        )
+      )
+
+      @file = File.new(fixture_file("5k.png"), "rb")
+      @dummy = Dummy.new
+      @dummy.avatar = @file
+      @dummy.save
+    end
+
+    context "reprocess" do
+      before do
+        @object = double
+        allow(@dummy.avatar).to receive(:s3_object).with(:original).and_return(@object)
+        allow(@dummy.avatar).to receive(:s3_object).with(:thumb).and_return(@object)
+        allow(@object).to receive(:get).and_yield(@file.read)
+        allow(@object).to receive(:exists?).and_return(true)
+        allow(@object).to receive(:download_file).with(anything)
+      end
+
+      it "uploads original" do
+        expect(@object).to receive(:upload_file).with(
+          anything,
+          { content_type: "image/png" },
+        ).and_return(true)
+        @dummy.avatar.reprocess!
+        expect(@object).to receive(:upload_file).with(
+          anything,
+          { content_type: "image/png" },
+        ).and_return(true)
+        @dummy.avatar.reprocess!
+      end
+
+      it "doesn't upload original" do
+        expect(@object).to receive(:upload_file).with(
+          anything,
+          { content_type: "image/png" },
+        ).and_return(true)
+        @dummy.avatar.reprocess!
+      end
+    end
+
+    after { @file.close }
   end
 
   context "An attachment that uses S3 for storage and has styles" do
@@ -444,14 +510,18 @@ describe Paperclip::Storage::S3 do
       it "uploads original" do
         expect(@object).to receive(:upload_file).with(
           anything,
-          content_type: "image/png",
-          acl: :"public-read"
+          {
+            content_type: "image/png",
+            acl: :"public-read",
+          },
         ).and_return(true)
         @dummy.avatar.reprocess!
         expect(@object).to receive(:upload_file).with(
           anything,
-          content_type: "image/png",
-          acl: :"public-read"
+          {
+            content_type: "image/png",
+            acl: :"public-read",
+          },
         ).and_return(true)
         @dummy.avatar.reprocess!
       end
@@ -459,8 +529,10 @@ describe Paperclip::Storage::S3 do
       it "doesn't upload original" do
         expect(@object).to receive(:upload_file).with(
           anything,
-          content_type: "image/png",
-          acl: :"public-read"
+          {
+            content_type: "image/png",
+            acl: :"public-read",
+          },
         ).and_return(true)
         @dummy.avatar.reprocess!
       end
@@ -669,7 +741,7 @@ describe Paperclip::Storage::S3 do
         object = double
         allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
-        expect(object).to receive(:presigned_url).with(:get, expires_in: 3600)
+        expect(object).to receive(:presigned_url).with(:get, { expires_in: 3600 })
         @dummy.avatar.expiring_url
       end
     end
@@ -684,8 +756,13 @@ describe Paperclip::Storage::S3 do
         object = double
         allow(@dummy.avatar).to receive(:s3_object).and_return(object)
         expect(object).to receive(:presigned_url).
-          with(:get, expires_in: 3600,
-                     response_content_disposition: "inline")
+          with(
+            :get,
+            {
+              expires_in: 3600,
+              response_content_disposition: "inline",
+            },
+          )
         @dummy.avatar.expiring_url
       end
     end
@@ -707,7 +784,13 @@ describe Paperclip::Storage::S3 do
         object = double
         allow(@dummy.avatar).to receive(:s3_object).and_return(object)
         expect(object).to receive(:presigned_url).
-          with(:get, expires_in: 3600, response_content_type: "image/png")
+          with(
+            :get,
+            {
+              expires_in: 3600,
+              response_content_type: "image/png",
+            },
+          )
         @dummy.avatar.expiring_url
       end
     end
@@ -754,14 +837,14 @@ describe Paperclip::Storage::S3 do
     it "generates a url for the thumb" do
       object = double
       allow(@dummy.avatar).to receive(:s3_object).with(:thumb).and_return(object)
-      expect(object).to receive(:presigned_url).with(:get, expires_in: 1800)
+      expect(object).to receive(:presigned_url).with(:get, { expires_in: 1800 })
       @dummy.avatar.expiring_url(1800, :thumb)
     end
 
     it "generates a url for the default style" do
       object = double
       allow(@dummy.avatar).to receive(:s3_object).with(:original).and_return(object)
-      expect(object).to receive(:presigned_url).with(:get, expires_in: 1800)
+      expect(object).to receive(:presigned_url).with(:get, { expires_in: 1800 })
       @dummy.avatar.expiring_url(1800)
     end
   end
@@ -906,7 +989,7 @@ describe Paperclip::Storage::S3 do
           object = double
           allow(@dummy.avatar).to receive(:s3_object).and_return(object)
           expect(object).to receive(:upload_file).
-            with(anything, content_type: "image/png", acl: :"public-read")
+            with(anything, { content_type: "image/png", acl: :"public-read" })
           @dummy.save
         end
 
@@ -1066,10 +1149,14 @@ describe Paperclip::Storage::S3 do
           allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
           expect(object).to receive(:upload_file).
-            with(anything,
-                 content_type: "image/png",
-                 acl: :"public-read",
-                 cache_control: "max-age=31557600")
+            with(
+              anything,
+              {
+                content_type: "image/png",
+                acl: :"public-read",
+                cache_control: "max-age=31557600",
+              },
+            )
           @dummy.save
         end
 
@@ -1107,10 +1194,14 @@ describe Paperclip::Storage::S3 do
           allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
           expect(object).to receive(:upload_file).
-            with(anything,
+            with(
+              anything,
+              {
                  content_type: "image/png",
                  acl: :"public-read",
-                 metadata: { "color" => "red" })
+                 metadata: { "color" => "red" },
+              },
+            )
           @dummy.save
         end
 
@@ -1148,10 +1239,14 @@ describe Paperclip::Storage::S3 do
           allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
           expect(object).to receive(:upload_file).
-            with(anything,
+            with(
+              anything,
+              {
                  content_type: "image/png",
                  acl: :"public-read",
-                 metadata: { "color" => "red" })
+                 metadata: { "color" => "red" },
+              },
+            )
           @dummy.save
         end
 
@@ -1190,10 +1285,14 @@ describe Paperclip::Storage::S3 do
             allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
             expect(object).to receive(:upload_file).
-              with(anything,
+              with(
+                anything,
+                {
                    content_type: "image/png",
                    acl: :"public-read",
-                   storage_class: "reduced_redundancy")
+                   storage_class: "reduced_redundancy",
+                },
+              )
             @dummy.save
           end
 
@@ -1286,9 +1385,14 @@ describe Paperclip::Storage::S3 do
               allow(@dummy.avatar).to receive(:s3_object).with(style).and_return(object)
 
               expect(object).to receive(:upload_file).
-                with(anything, content_type: "image/png",
-                               acl: :"public-read",
-                               storage_class: :reduced_redundancy)
+                with(
+                  anything,
+                  {
+                    content_type: "image/png",
+                    acl: :"public-read",
+                    storage_class: :reduced_redundancy,
+                  },
+                )
             end
             @dummy.save
           end
@@ -1331,7 +1435,7 @@ describe Paperclip::Storage::S3 do
             allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
             expect(object).to receive(:upload_file).
-              with(anything, content_type: "image/png", acl: :"public-read")
+              with(anything, { content_type: "image/png", acl: :"public-read" })
             @dummy.save
           end
 
@@ -1370,9 +1474,14 @@ describe Paperclip::Storage::S3 do
           allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
           expect(object).to receive(:upload_file).
-            with(anything, content_type: "image/png",
-                           acl: :"public-read",
-                           server_side_encryption: "AES256")
+            with(
+              anything,
+              {
+                content_type: "image/png",
+                acl: :"public-read",
+                server_side_encryption: "AES256",
+              },
+            )
           @dummy.save
         end
 
@@ -1410,10 +1519,14 @@ describe Paperclip::Storage::S3 do
           allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
           expect(object).to receive(:upload_file).
-            with(anything,
-                 content_type: "image/png",
-                 acl: :"public-read",
-                 storage_class: :reduced_redundancy)
+            with(
+              anything,
+              {
+                content_type: "image/png",
+                acl: :"public-read",
+                storage_class: :reduced_redundancy,
+              },
+            )
           @dummy.save
         end
 
@@ -1557,7 +1670,7 @@ describe Paperclip::Storage::S3 do
             allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
             expect(object).to receive(:upload_file).
-              with(anything, content_type: "image/png", acl: :"public-read")
+              with(anything, { content_type: "image/png", acl: :"public-read" })
             @dummy.save
           end
 
@@ -1595,7 +1708,7 @@ describe Paperclip::Storage::S3 do
             allow(@dummy.avatar).to receive(:s3_object).and_return(object)
 
             expect(object).to receive(:upload_file).
-              with(anything, content_type: "image/png", acl: :private)
+              with(anything, { content_type: "image/png", acl: :private })
             @dummy.save
           end
 
@@ -1641,8 +1754,10 @@ describe Paperclip::Storage::S3 do
 
               expect(object).to receive(:upload_file).
                 with(anything,
-                     content_type: "image/png",
-                     acl: style == :thumb ? :public_read : :private)
+                     {
+                       content_type: "image/png",
+                       acl: style == :thumb ? :public_read : :private
+                     })
             end
             @dummy.save
           end
@@ -1711,10 +1826,14 @@ describe Paperclip::Storage::S3 do
             allow(@dummy.avatar).to receive(:s3_object).with(style).and_return(object)
 
             expect(object).to receive(:upload_file).
-              with(anything,
-                   content_type: "image/png",
-                   acl: :"public-read",
-                   content_disposition: 'attachment; filename="Custom Avatar Name.png"')
+              with(
+                anything,
+                {
+                  content_type: "image/png",
+                  acl: :"public-read",
+                  content_disposition: 'attachment; filename="Custom Avatar Name.png"',
+                },
+              )
           end
           @dummy.save
         end

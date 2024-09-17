@@ -6,12 +6,12 @@ module Paperclip
     COLUMNS = { file_name: :string,
                 content_type: :string,
                 file_size: :bigint,
-                updated_at: :datetime }.freeze
+                updated_at: :datetime }
 
     def self.included(_base)
       ActiveRecord::ConnectionAdapters::Table.include TableDefinition
       ActiveRecord::ConnectionAdapters::TableDefinition.include TableDefinition
-      ActiveRecord::ConnectionAdapters::AbstractAdapter.include Statements
+      ActiveRecord::Migration.include Statements
       ActiveRecord::Migration::CommandRecorder.include CommandRecorder
     end
 

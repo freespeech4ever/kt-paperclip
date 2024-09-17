@@ -76,11 +76,14 @@ module Paperclip
       Paperclip.run("file", "-b --mime :file", file: @file.path).
         split(/[:;\s]+/).first
     rescue Terrapin::CommandLineError
+      Paperclip.log("Problem getting type from `file` command. Possible that `file` doesn't exist on this system. Content Type validations don't work without this.")
+
       ""
     end
 
     def mapped_content_type
-      Paperclip.options[:content_type_mappings][filename_extension]
+      content_type_mappings = Paperclip.options[:content_type_mappings]
+      content_type_mappings[filename_extension] || content_type_mappings[filename_extension.to_s]
     end
 
     def filename_extension
